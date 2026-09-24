@@ -1,0 +1,1587 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>タテガキ変換</title>
+<meta name="description" content="横書きの文章を原稿用紙のマス目で縦書きに変換。SNSに貼れる縦書きテキストや画像も作れます。PDF・Word・画像からの読み込み、縦書きから横書きへの変換にも対応。無料・登録不要で、文章はブラウザの中だけで処理します。">
+<meta name="theme-color" content="#2E6A53">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%232E6A53'/%3E%3Ctext x='32' y='46' font-size='40' text-anchor='middle' fill='white' font-family='serif' font-weight='700'%3E%E7%B8%A6%3C/text%3E%3C/svg%3E">
+<!-- SNS で共有したときの表示。og:image と og:url は公開先の URL が決まったら https:// からの完全な URL にする -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="タテガキ変換">
+<meta property="og:title" content="タテガキ変換">
+<meta property="og:description" content="横書きの文章を、原稿用紙のマス目で縦書きに。SNSに貼れるテキストや画像も作れます。PDF・画像の読み込み、縦→横にも対応。無料・登録不要。">
+<meta property="og:locale" content="ja_JP">
+<meta property="og:image" content="ogp.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@400;600;800&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap">
+<style>
+  :root {
+    --paper: #F6F8F5;
+    --surface: #FFFFFF;
+    --ink: #1D2420;
+    --muted: #5E6B64;
+    --grid: #8FB5A2;
+    --grid-soft: #C9DDD2;
+    --accent: #2E6A53;
+    --accent-ink: #FFFFFF;
+    --line: #DCE4DF;
+    --field: #FBFCFA;
+    --cell: 30px;
+    --mincho: "Shippori Mincho", "Hiragino Mincho ProN", "Yu Mincho", "YuMincho", serif;
+    --gothic: "Zen Kaku Gothic New", "Hiragino Sans", "Yu Gothic", "Meiryo", sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --paper: #121715;
+      --surface: #1A211E;
+      --ink: #E4ECE7;
+      --muted: #9AA9A1;
+      --grid: #4F7C67;
+      --grid-soft: #2E4439;
+      --accent: #7CC4A5;
+      --accent-ink: #0E1A15;
+      --line: #2A3530;
+      --field: #151C19;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --paper: #121715;
+    --surface: #1A211E;
+    --ink: #E4ECE7;
+    --muted: #9AA9A1;
+    --grid: #4F7C67;
+    --grid-soft: #2E4439;
+    --accent: #7CC4A5;
+    --accent-ink: #0E1A15;
+    --line: #2A3530;
+    --field: #151C19;
+  }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--gothic);
+    font-size: 15px;
+    line-height: 1.7;
+  }
+  .wrap {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 28px 16px 56px;
+    display: grid;
+    gap: 28px;
+  }
+
+  header { display: flex; align-items: flex-end; gap: 18px; flex-wrap: wrap; }
+  .logo {
+    writing-mode: vertical-rl;
+    font-family: var(--mincho);
+    font-weight: 800;
+    font-size: 30px;
+    line-height: 1;
+    letter-spacing: 0.08em;
+    padding: 10px 8px;
+    border: 2px solid var(--accent);
+    color: var(--accent);
+    background: var(--surface);
+  }
+  header h1 {
+    margin: 0;
+    font-family: var(--mincho);
+    font-weight: 800;
+    font-size: clamp(24px, 4vw, 32px);
+    line-height: 1.3;
+    text-wrap: balance;
+  }
+  header p { margin: 4px 0 0; color: var(--muted); max-width: 60ch; }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+  }
+  .editor {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 280px;
+  }
+  .editor .input { padding: 18px; display: grid; gap: 8px; grid-template-rows: auto 1fr auto; border-right: 1px solid var(--line); }
+  .editor .opts { padding: 18px; display: grid; gap: 16px; align-content: start; }
+  @media (max-width: 760px) {
+    .editor { grid-template-columns: 1fr; }
+    .editor .input { border-right: 0; border-bottom: 1px solid var(--line); }
+  }
+
+  .label {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+  }
+  textarea {
+    width: 100%;
+    box-sizing: border-box;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: var(--field);
+    color: var(--ink);
+    font: inherit;
+    padding: 12px;
+    resize: vertical;
+  }
+  #src { min-height: 170px; font-family: var(--mincho); font-size: 16px; }
+  textarea:focus-visible, input:focus-visible, select:focus-visible, button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  .field { display: grid; gap: 6px; }
+  .row { display: flex; align-items: center; gap: 10px; }
+  input[type="number"], select {
+    font: inherit;
+    color: var(--ink);
+    background: var(--field);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 6px 8px;
+  }
+  input[type="number"] { width: 5em; font-variant-numeric: tabular-nums; }
+  select { width: 100%; }
+  .presets { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip {
+    font: inherit;
+    font-size: 13px;
+    border: 1px solid var(--line);
+    background: var(--field);
+    color: var(--ink);
+    border-radius: 999px;
+    padding: 2px 10px;
+    cursor: pointer;
+    font-variant-numeric: tabular-nums;
+  }
+  .chip[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); font-weight: 700; }
+  .check { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; font-size: 14px; line-height: 1.5; }
+  .check input { accent-color: var(--accent); margin-top: 4px; }
+  .check small { display: block; color: var(--muted); font-size: 12px; }
+
+  .section-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+  }
+  .section-head h2 {
+    margin: 0;
+    font-family: var(--mincho);
+    font-size: 20px;
+    font-weight: 800;
+  }
+  .stats { display: flex; gap: 16px; flex-wrap: wrap; color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+  .stats b { color: var(--ink); font-weight: 700; }
+
+  /* 原稿用紙プレビュー */
+  .wrap > * { min-width: 0; }
+  .scroller {
+    overflow-x: auto;
+    direction: rtl;
+    padding: 22px;
+  }
+  /* 長文は画面幅に収まる列数でページに分け、縦に積む */
+  .pages { display: grid; gap: 22px; justify-items: start; }
+  .page { display: grid; gap: 6px; justify-items: start; }
+  .page-no { direction: ltr; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .sheet {
+    --gap: 5px;
+    display: inline-flex;
+    direction: rtl;
+    gap: var(--gap);
+    padding: 10px;
+    border: 1.5px solid var(--grid);
+    background: var(--surface);
+  }
+  /* ルビがあるときは列の間をルビ用に広げる */
+  .sheet.has-ruby { --gap: calc(var(--cell) * 0.45); padding: 10px calc(10px + var(--gap)); }
+  .col {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--grid);
+  }
+  .cell {
+    position: relative;
+    direction: ltr;
+    width: var(--cell);
+    height: var(--cell);
+    box-sizing: border-box;
+    border-top: 1px solid var(--grid-soft);
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--mincho);
+    font-size: calc(var(--cell) * 0.66);
+    line-height: 1;
+    font-feature-settings: "vert" 1;
+  }
+  .cell:first-child { border-top: 0; }
+  .tcy { text-combine-upright: all; }
+  /* ぶら下げ：列の最後のマスに句読点を一緒に入れる */
+  .cell.has-hang {
+    padding: 0 calc(var(--cell) * 0.3) calc(var(--cell) * 0.3) 0;
+    font-size: calc(var(--cell) * 0.56);
+  }
+  .hang { position: absolute; right: 1px; bottom: 1px; font-size: calc(var(--cell) * 0.42); line-height: 1; }
+  .hang.two { font-size: calc(var(--cell) * 0.34); }
+  .ruby {
+    position: absolute;
+    left: 100%;
+    width: var(--gap);
+    direction: ltr;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-around;
+    align-items: center;
+    font-family: var(--mincho);
+    font-size: calc(var(--cell) * 0.3);
+    line-height: 1;
+  }
+  .ruby span { writing-mode: vertical-rl; }
+
+  .output-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .btn {
+    font: inherit;
+    font-weight: 700;
+    border: 0;
+    border-radius: 4px;
+    padding: 8px 18px;
+    background: var(--accent);
+    color: var(--accent-ink);
+    cursor: pointer;
+  }
+  .btn.ghost { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+  .toast { font-size: 13px; color: var(--accent); min-height: 1.5em; }
+  #out {
+    min-height: 260px;
+    font-family: var(--mincho);
+    font-size: 16px;
+    line-height: 1.35;
+    white-space: pre;
+    overflow: auto;
+  }
+  .out-body { padding: 18px; display: grid; gap: 12px; }
+  .note { color: var(--muted); font-size: 13px; margin: 0; }
+  .mode {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 2px;
+    margin-top: 12px;
+    padding: 3px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--surface);
+  }
+  .mode button {
+    font: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    border: 0;
+    border-radius: 999px;
+    padding: 6px 16px;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .mode button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+  .opt-group { display: grid; gap: 16px; }
+  /* 変換の向きに合わない部品は隠す */
+  body[data-mode="v2h"] [data-mode="h2v"], body[data-mode="h2v"] [data-mode="v2h"] { display: none; }
+  /* 縦書きテキストは右の列から読むので右詰めにする */
+  body[data-mode="h2v"] #out { text-align: right; }
+  body[data-mode="v2h"] #out { white-space: pre-wrap; line-height: 1.8; }
+  body[data-mode="v2h"] #src { min-height: 360px; line-height: 1.5; }
+  .drop-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10;
+    display: none;
+    place-items: center;
+    background: color-mix(in srgb, var(--paper) 88%, transparent);
+    border: 3px dashed var(--accent);
+    color: var(--accent);
+    font-family: var(--mincho);
+    font-size: 22px;
+    font-weight: 800;
+    text-align: center;
+    pointer-events: none;
+  }
+  .drop-overlay small { display: block; font-family: var(--gothic); font-size: 13px; font-weight: 500; color: var(--muted); }
+  body.dropping .drop-overlay { display: grid; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body data-mode="h2v">
+
+<div class="drop-overlay" aria-hidden="true"><div>ここにファイルをドロップ<small>テキスト（.txt など）・Word（.docx／.doc）・PDF・画像（文字を読み取ります）</small></div></div>
+
+<div class="wrap">
+  <header>
+    <div class="logo" aria-hidden="true">縦書</div>
+    <div>
+      <h1>タテガキ変換</h1>
+      <p>横書きの文章を原稿用紙のマス目で縦書きに組み、SNSやメールにそのまま貼れる縦書きテキストも作ります。縦書きの文章を横書きに戻すこともできます。</p>
+      <div class="mode" role="group" aria-label="変換の向き">
+        <button type="button" data-set-mode="h2v" aria-pressed="true">横書き → 縦書き</button>
+        <button type="button" data-set-mode="v2h" aria-pressed="false">縦書き → 横書き</button>
+      </div>
+    </div>
+  </header>
+
+  <section class="panel editor" aria-label="入力と設定">
+    <div class="input">
+      <label class="label" for="src" id="srcLabel">横書きの文章（貼り付け、またはファイルをドロップ）</label>
+      <textarea id="src" spellcheck="false"></textarea>
+      <div class="output-actions">
+        <button class="btn ghost" id="open" type="button">ファイルを開く</button>
+        <input type="file" id="file" accept=".txt,.text,.md,.csv,.docx,.doc,.pdf,.png,.jpg,.jpeg,.webp,.bmp,.gif,text/plain,image/*,application/pdf" hidden>
+        <button class="btn ghost" id="sample" type="button">見本を読み込む</button>
+        <button class="btn ghost" id="clear" type="button">消去</button>
+        <span class="toast" id="toastFile" role="status"></span>
+      </div>
+    </div>
+    <div class="opts">
+      <div class="opt-group" data-mode="h2v">
+      <div class="field">
+        <span class="label">1列の字数（マス）</span>
+        <div class="row">
+          <input type="number" id="rows" min="3" max="80" value="20" aria-label="1列の字数">
+          <span>字</span>
+        </div>
+        <div class="presets" id="presets">
+          <button class="chip" type="button" data-v="10">10</button>
+          <button class="chip" type="button" data-v="15">15</button>
+          <button class="chip" type="button" data-v="20">20</button>
+          <button class="chip" type="button" data-v="40">40</button>
+        </div>
+      </div>
+      <div class="field">
+        <label class="label" for="sep">列の間隔（テキスト出力）</label>
+        <select id="sep">
+          <option value="">詰める</option>
+          <option value=" ">半角スペース</option>
+          <option value="　" selected>全角スペース</option>
+        </select>
+      </div>
+      <div class="field">
+        <label class="label" for="kinsoku">禁則処理</label>
+        <select id="kinsoku">
+          <option value="hang" selected>ぶら下げ（原稿用紙式）</option>
+          <option value="push">追い出し</option>
+          <option value="none">しない</option>
+        </select>
+      </div>
+      <label class="check"><input type="checkbox" id="optIndent" checked><span>段落の頭を1字下げる<small>「 で始まる段落や、すでに空白がある段落はそのまま</small></span></label>
+      <label class="check"><input type="checkbox" id="optTcy"><span>縦中横<small>2桁の半角数字や !? を1マスに横並び。テキスト出力では半角のまま</small></span></label>
+      <label class="check"><input type="checkbox" id="optRuby" checked><span>ルビを付ける<small>｜漢字《かんじ》 または 漢字《かんじ》。テキスト出力では省きます</small></span></label>
+      <label class="check"><input type="checkbox" id="optVert" checked><span>縦書き用の記号に置き換える<small>ー→｜、「→﹁、。→︒ など</small></span></label>
+      <label class="check"><input type="checkbox" id="optFull" checked><span>半角英数を全角にする<small>テキスト出力のマスを揃えるため</small></span></label>
+      <label class="check"><input type="checkbox" id="optKanji"><span>数字を漢数字にする<small>2026 → 二〇二六</small></span></label>
+      </div>
+      <div class="opt-group" data-mode="v2h">
+      <label class="check"><input type="checkbox" id="optJoin" checked><span>列の折り返しをつなぐ<small>字数いっぱいで折り返した列を1つの段落にまとめます</small></span></label>
+      <label class="check"><input type="checkbox" id="optUnvert" checked><span>縦書き用の記号を元に戻す<small>｜ を ー に、縦向きのかっこや句読点を横向きに戻します</small></span></label>
+      <label class="check"><input type="checkbox" id="optHalf"><span>全角英数を半角にする<small>ＡＢＣ１２３ → ABC123</small></span></label>
+      </div>
+      <div class="field">
+        <label class="label" for="ocrDir">画像の文字の向き（文字の読み取り）</label>
+        <select id="ocrDir">
+          <option value="jpn" selected>横書き</option>
+          <option value="jpn_vert">縦書き</option>
+        </select>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-preview" data-mode="h2v">
+    <div class="section-head">
+      <h2 id="h-preview">原稿用紙プレビュー</h2>
+      <div class="output-actions">
+        <div class="stats" id="stats"></div>
+        <span class="toast" id="toastPng" role="status"></span>
+        <button class="btn ghost" id="png" type="button">画像で保存</button>
+      </div>
+    </div>
+    <div class="panel scroller" id="scroller">
+      <div class="pages" id="pages"></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-out">
+    <div class="section-head">
+      <h2 id="h-out">縦書きテキスト</h2>
+      <div class="output-actions">
+        <div class="stats" id="statsOut" data-mode="v2h"></div>
+        <span class="toast" id="toast" role="status"></span>
+        <button class="btn" id="copy" type="button">コピー</button>
+      </div>
+    </div>
+    <div class="panel out-body">
+      <textarea id="out" readonly wrap="off" aria-label="縦書きに変換したテキスト"></textarea>
+      <p class="note" id="noteOut">右詰めで、右の列から左へ読みます。等幅でない書体や半角文字が混じる環境では列がずれることがあります。ルビは省き、ぶら下げた句読点は列の下にはみ出して置きます。</p>
+    </div>
+  </section>
+</div>
+
+<script>
+(() => {
+  const SAMPLE =
+`吾輩《わがはい》は猫である。名前はまだ無い。
+どこで生れたかとんと見当《けんとう》がつかぬ。何でも薄暗いじめじめした所でニャーニャー泣いていた事だけは記憶している。
+
+吾輩はここで始めて人間というものを見た。しかもあとで聞くとそれは書生という人間中で一番獰悪《どうあく》な種族であったそうだ。（夏目漱石『吾輩は猫である』より）`;
+
+  // 縦書き用の置換（テキスト出力用）
+  const VERT = {
+    'ー':'｜','―':'｜','—':'｜','－':'｜','‐':'｜','─':'｜',
+    '〜':'≀','～':'≀','…':'︙','‥':'︰',
+    '、':'︑','。':'︒','，':'︐','：':'︰','；':'︔','！':'︕','？':'︖',
+    '「':'﹁','」':'﹂','『':'﹃','』':'﹄','（':'︵','）':'︶',
+    '【':'︻','】':'︼','〔':'︹','〕':'︺','［':'﹇','］':'﹈',
+    '｛':'︷','｝':'︸','〈':'︿','〉':'﹀','《':'︽','》':'︾',
+    '→':'↓','←':'↑','↑':'→','↓':'←','＝':'‖'
+  };
+  // 行頭禁則（列の頭に置かない字）
+  const HEAD_NG = new Set(Array.from('、。，．,.」』）)】〕］]｝}〉》’”！？!?ー…‥・：；:;ぁぃぅぇぉっゃゅょゎゕゖァィゥェォッャュョヮヵヶ々ゝゞヽヾ'));
+  // 行末禁則（列の最後に置かない字）
+  const TAIL_NG = new Set(Array.from('「『（(【〔［[｛{〈《‘“'));
+  // ぶら下げできる字（句読点と閉じ括弧）
+  const HANG_OK = new Set(Array.from('、。，．,.」』）)】〕］]｝}〉》’”'));
+  // 縦書き用の字形（︒ ﹁ ︵ など）や部首の文字（⼀ ⾒）をふつうの字に戻す。
+  // NFKC だと ︵ → ( のように半角になるものがあるので、半角の記号は全角にそろえる
+  // ︙ ︰ は NFKC だと "..." ".." になるので直接決める
+  const fromVerticalForm = c => {
+    if (c === '︙') return '…';
+    if (c === '︰') return '‥';
+    const k = c.normalize('NFKC');
+    return /^[!-~]$/.test(k) ? String.fromCharCode(k.charCodeAt(0) + 0xFEE0) : k;
+  };
+  const KANJI = '〇一二三四五六七八九';
+  const RUBY_RE = /[|｜]([^|｜《》\n]+?)《([^《》\n]+?)》|([\p{Script=Han}々〆ヵヶ]+)《([^《》\n]+?)》/gu;
+  const TCY_RE = /[0-9]+|[!?！？]{2}/g;
+
+  const $ = id => document.getElementById(id);
+  const src = $('src'), rowsEl = $('rows'), sepEl = $('sep'), kinsokuEl = $('kinsoku');
+  const optVert = $('optVert'), optFull = $('optFull'), optKanji = $('optKanji');
+  const optIndent = $('optIndent'), optTcy = $('optTcy'), optRuby = $('optRuby');
+  const ocrDirEl = $('ocrDir');
+  const optJoin = $('optJoin'), optUnvert = $('optUnvert'), optHalf = $('optHalf');
+  const pagesEl = $('pages'), scroller = $('scroller'), out = $('out'), stats = $('stats');
+
+  function el(tag, cls, text) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  }
+
+  const toFull = c => /[\x21-\x7E]/.test(c) ? String.fromCharCode(c.charCodeAt(0) + 0xFEE0) : c === ' ' ? '　' : c;
+
+  // 1マスに入る単位（unit）に分ける。{ t: 文字, tcy?: 縦中横, ruby?: ルビ番号, ri?: ルビ内の位置 }
+  function plainUnits(s) {
+    if (optKanji.checked) {
+      s = s.replace(/[0-9０-９]/g, c => KANJI[c >= '０' ? c.charCodeAt(0) - 0xFF10 : c.charCodeAt(0) - 48]);
+    }
+    const units = [];
+    const pushChars = str => { for (const c of str) units.push({ t: optFull.checked ? toFull(c) : c }); };
+    if (!optTcy.checked) { pushChars(s); return units; }
+    let last = 0;
+    for (const m of s.matchAll(TCY_RE)) {
+      pushChars(s.slice(last, m.index));
+      const tok = m[0];
+      if (/^[0-9]/.test(tok)) {
+        // 原稿用紙の書き方に合わせて、半角数字は1マスに2字
+        for (let i = 0; i < tok.length; i += 2) {
+          const pair = tok.slice(i, i + 2);
+          if (pair.length === 2) units.push({ t: pair, tcy: true });
+          else pushChars(pair);
+        }
+      } else {
+        units.push({ t: tok.replace(/！/g, '!').replace(/？/g, '?'), tcy: true });
+      }
+      last = m.index + tok.length;
+    }
+    pushChars(s.slice(last));
+    return units;
+  }
+
+  function toUnits(para, rubies) {
+    const units = [];
+    let last = 0;
+    if (optRuby.checked) {
+      for (const m of para.matchAll(RUBY_RE)) {
+        units.push(...plainUnits(para.slice(last, m.index)));
+        const base = plainUnits(m[1] ?? m[3]);
+        const id = rubies.push({ text: m[2] ?? m[4], len: base.length }) - 1;
+        base.forEach((u, i) => { u.ruby = id; u.ri = i; });
+        units.push(...base);
+        last = m.index + m[0].length;
+      }
+    }
+    units.push(...plainUnits(para.slice(last)));
+    return units;
+  }
+
+  const isHeadNg = u => HEAD_NG.has(u.t) || (u.tcy && /^[!?]/.test(u.t));
+
+  // 列に割り付ける。列は { cells: マスの中身, hang: ぶら下げた字 }
+  function layout(text, h) {
+    const rubies = [];
+    const cols = [];
+    const mode = kinsokuEl.value;
+    for (const para of text.split('\n')) {
+      const units = toUnits(para, rubies);
+      if (!units.length) { cols.push({ cells: [], hang: [] }); continue; }
+      if (optIndent.checked && !/^[\s「『（(]/.test(para)) units.unshift({ t: '　' });
+      let i = 0;
+      while (i < units.length) {
+        let end = Math.min(i + h, units.length);
+        let hang = [];
+        if (end < units.length && mode !== 'none') {
+          if (mode === 'hang') {
+            let j = end;
+            while (j < units.length && j - end < 2 && !units[j].tcy && HANG_OK.has(units[j].t)) j++;
+            if (j > end && (j >= units.length || !isHeadNg(units[j]))) hang = units.slice(end, j);
+          }
+          if (!hang.length) {
+            // 追い出し：頭に来てはいけない字の前の字から次の列へ送る
+            let e = end;
+            while (e > i + 1 && isHeadNg(units[e])) e--;
+            if (isHeadNg(units[e])) e = end;
+            // 行末禁則：開き括弧などを次の列へ送る
+            while (e > i + 1 && TAIL_NG.has(units[e - 1].t)) e--;
+            end = e;
+          }
+        }
+        cols.push({ cells: units.slice(i, end), hang });
+        i = end + hang.length;
+      }
+    }
+    // 末尾の空列は削る
+    while (cols.length > 1 && cols[cols.length - 1].cells.length === 0) cols.pop();
+    return { cols, rubies };
+  }
+
+  // 列の中で同じルビがかかるマスをまとめ、列をまたぐときはルビを字数の割合で分ける
+  function rubyGroups(cells, rubies) {
+    const groups = [];
+    cells.forEach((u, r) => {
+      if (u.ruby === undefined) return;
+      const g = groups[groups.length - 1];
+      if (g && g.id === u.ruby && g.start + g.n === r) { g.n++; g.b = u.ri; }
+      else groups.push({ id: u.ruby, start: r, n: 1, a: u.ri, b: u.ri });
+    });
+    return groups.map(g => {
+      const { text, len } = rubies[g.id];
+      const chars = Array.from(text);
+      const from = Math.round(g.a * chars.length / len);
+      const to = Math.round((g.b + 1) * chars.length / len);
+      return { start: g.start, n: g.n, text: chars.slice(from, to) };
+    });
+  }
+
+  // プレビューの幅に収まる1ページあたりの列数
+  function columnsPerPage(hasRuby) {
+    const cell = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--cell')) || 30;
+    const gap = hasRuby ? cell * 0.45 : 5;
+    const cs = getComputedStyle(scroller);
+    const inner = scroller.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    const avail = inner - 3 - 20 - (hasRuby ? gap * 2 : 0) - 2;
+    return Math.max(3, Math.floor((avail + gap) / (cell + 2 + gap)));
+  }
+
+  function paginate(cols, perPage) {
+    const pages = [];
+    for (let i = 0; i < cols.length; i += perPage) pages.push(cols.slice(i, i + perPage));
+    return pages.length ? pages : [[]];
+  }
+
+  function renderPages(pages, rubies, h, perPage) {
+    const frag = document.createDocumentFragment();
+    pages.forEach((cols, p) => {
+      const page = el('div', 'page');
+      if (pages.length > 1) page.append(el('div', 'page-no', `${p + 1} / ${pages.length}`));
+      page.append(renderSheet(cols, rubies, h, perPage));
+      frag.append(page);
+    });
+    pagesEl.replaceChildren(frag);
+  }
+
+  function renderSheet(cols, rubies, h, total) {
+    const sheet = el('div', rubies.length ? 'sheet has-ruby' : 'sheet');
+    const frag = document.createDocumentFragment();
+    for (let c = 0; c < total; c++) {
+      const col = el('div', 'col');
+      const { cells = [], hang = [] } = cols[c] || {};
+      for (let r = 0; r < h; r++) {
+        const cell = el('span', 'cell');
+        const u = cells[r];
+        if (u) cell.append(u.tcy ? el('span', 'tcy', u.t) : u.t);
+        if (r === h - 1 && hang.length) {
+          cell.classList.add('has-hang');
+          cell.append(el('span', hang.length > 1 ? 'hang two' : 'hang', hang.map(x => x.t).join('')));
+        }
+        col.appendChild(cell);
+      }
+      for (const g of rubyGroups(cells, rubies)) {
+        const rb = el('span', 'ruby');
+        rb.style.top = `calc(var(--cell) * ${g.start})`;
+        rb.style.height = `calc(var(--cell) * ${g.n})`;
+        for (const ch of g.text) rb.append(el('span', '', ch));
+        col.appendChild(rb);
+      }
+      frag.appendChild(col);
+    }
+    sheet.replaceChildren(frag);
+    return sheet;
+  }
+
+  // テキスト出力もプレビューと同じページに分け、空行を挟んで上から並べる
+  function renderText(pages) {
+    out.value = verticalText(pages, sepEl.value, optVert.checked);
+    // はみ出すときも、読み始め（右端）が見えるようにする
+    out.scrollLeft = out.scrollWidth;
+  }
+
+  function verticalText(pages, sep, vert) {
+    const map = vert ? (ch => VERT[ch] || ch) : (ch => ch);
+    const blocks = pages.map(cols => {
+      const lines = cols.map(c => [...c.cells, ...c.hang].map(u => u.tcy ? u.t : map(u.t)));
+      const height = Math.max(0, ...lines.map(l => l.length));
+      const rows = [];
+      for (let r = 0; r < height; r++) {
+        const row = [];
+        for (let c = lines.length - 1; c >= 0; c--) row.push(lines[c][r] !== undefined ? lines[c][r] : '　');
+        // 右詰めで表示するので、行の右端（最初の列の側）の空白は削らず、どの行も同じ幅にそろえる
+        rows.push(row.join(sep));
+      }
+      return rows.join('\n');
+    });
+    return blocks.join('\n\n');
+  }
+
+  // ---- 縦書き → 横書き ----
+  // 縦書き用の記号を元に戻す（残りの縦書き用の字形は NFKC で戻す）
+  const UNVERT = { '｜': 'ー', '≀': '〜', '‖': '＝' };
+  // 等幅で見たときの字の幅（全角 2、半角 1）
+  const cellWidth = ch => /^[\x00-\xFF｡-ﾟ]$/.test(ch) ? 1 : 2;
+
+  // 縦書きテキストの1かたまり（空行で区切られた部分）を、右の列から順に取り出す
+  function readGrid(rows) {
+    const marks = rows.map(row => {
+      const found = [];
+      let x = 0;
+      for (const ch of row) {
+        const w = cellWidth(ch);
+        if (!/\s/.test(ch)) found.push({ x, ch, w });
+        x += w;
+      }
+      return found;
+    });
+    const all = marks.flat();
+    // 1列の幅を見分ける：全角スペース区切り 4、半角スペース区切り 3、詰める 2
+    // 縦中横の2字目（半角）は列の頭から1ずれる
+    const fits = pitch => all.every(m => m.x % pitch === 0 || (m.w === 1 && m.x % pitch === 1));
+    const pitch = [4, 3, 2].find(fits);
+    const p = pitch || 2;
+    const cols = [];
+    marks.forEach((found, r) => {
+      for (const m of found) {
+        const c = Math.floor(m.x / p);
+        (cols[c] ||= [])[r] = (cols[c][r] || '') + m.ch;
+      }
+    });
+    const texts = [];
+    for (let c = cols.length - 1; c >= 0; c--) {
+      let s = '';
+      for (let r = 0; r < rows.length; r++) s += (cols[c] && cols[c][r]) || '　';
+      texts.push(s.replace(/　+$/, ''));
+    }
+    // 1列が100字を超えるものは縦書きのマス目ではない（ふつうの横書きの文章など）
+    return { cols: texts, ok: !!pitch && rows.length <= 100 };
+  }
+
+  // 字数いっぱいまで埋まった列は、次の列に続いているとみなしてつなぐ
+  function joinColumns(cols) {
+    const lens = cols.map(c => Array.from(c).length);
+    const max = Math.max(0, ...lens);
+    const freq = new Map();
+    for (const n of lens) if (n >= max * 0.6) freq.set(n, (freq.get(n) || 0) + 1);
+    // 列の字数：ぶら下げで1字はみ出す列もあるので、いちばん多い長さを使う
+    const full = [...freq].sort((a, b) => b[1] - a[1] || b[0] - a[0])[0]?.[0] || max;
+    const paras = [];
+    let cur = null;
+    cols.forEach((c, i) => {
+      const prev = cols[i - 1], prevLen = lens[i - 1];
+      const cont = cur !== null && c !== '' && prev !== '' && !/^　/.test(c) &&
+        (prevLen >= full || (prevLen === full - 1 && !/[。．！？!?」』）)]$/.test(prev)));
+      if (cont) cur += c;
+      else {
+        if (cur !== null) paras.push(cur);
+        cur = c;
+      }
+    });
+    if (cur !== null) paras.push(cur);
+    return paras;
+  }
+
+  function horizontalText(text) {
+    const blocks = text.replace(/\r\n?/g, '\n').replace(/\t/g, '　').split(/\n[ 　]*\n/);
+    const cols = [];
+    let ok = true;
+    for (const block of blocks) {
+      const rows = block.split('\n');
+      while (rows.length && !rows[0].trim()) rows.shift();
+      while (rows.length && !rows[rows.length - 1].trim()) rows.pop();
+      if (!rows.length) continue;
+      const g = readGrid(rows);
+      ok = ok && g.ok;
+      cols.push(...g.cols);
+    }
+    let s = (optJoin.checked ? joinColumns(cols) : cols).join('\n');
+    if (optUnvert.checked) s = s.replace(/[︐-︙︰-﹏｜≀‖]/g, c => UNVERT[c] || fromVerticalForm(c));
+    if (optHalf.checked) s = s.replace(/[０-９Ａ-Ｚａ-ｚ]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
+    return { text: s, ok };
+  }
+
+  const NOTE_H2V = '右詰めで、右の列から左へ読みます。等幅でない書体や半角文字が混じる環境では列がずれることがあります。ルビは省き、ぶら下げた句読点は列の下にはみ出して置きます。';
+  const NOTE_V2H = '右の列から順に読んで横書きに戻します。PDF・画像・Word のファイルは、読み取った文章をこの欄に直接入れます。この欄は直接直せます。';
+  const NOTE_V2H_BAD = '縦書きのマス目の並びをうまく読み取れませんでした。列の区切りがずれているかもしれません。結果を確かめてください。';
+
+  // ファイルから読み取った文章（すでに読む順に並んでいる）を出力欄に直接入れたとき
+  let directText = null;
+
+  function updateReverse() {
+    let ok = true;
+    if (src.value.trim()) {
+      const r = horizontalText(src.value);
+      out.value = r.text;
+      ok = r.ok;
+    } else if (directText === null) {
+      out.value = '';
+    }
+    $('noteOut').textContent = ok ? NOTE_V2H : NOTE_V2H_BAD;
+    updateOutStats();
+  }
+
+  function updateOutStats() {
+    const t = out.value;
+    const count = Array.from(t.replace(/\s/g, '')).length;
+    const paras = t.split('\n').filter(l => l.trim()).length;
+    $('statsOut').innerHTML = `<span>文字数 <b>${count.toLocaleString()}</b></span><span>段落数 <b>${paras}</b></span>`;
+  }
+
+  // 変換の向きの切り替え。入力欄の文章は向きごとに別々に覚えておく
+  let mode = 'h2v';
+  const texts = { h2v: '', v2h: '' };
+  const MODE_TEXT = {
+    h2v: { label: '横書きの文章（貼り付け、またはファイルをドロップ）', out: '縦書きテキスト', aria: '縦書きに変換したテキスト' },
+    v2h: { label: '縦書きの文章（縦書きテキストを貼り付け、または縦書きの PDF・画像・Word をドロップ）', out: '横書きテキスト', aria: '横書きに戻したテキスト' }
+  };
+  function setMode(m, keepText) {
+    if (!keepText) texts[mode] = src.value;
+    mode = m;
+    document.body.dataset.mode = m;
+    for (const b of document.querySelectorAll('[data-set-mode]')) b.setAttribute('aria-pressed', String(b.dataset.setMode === m));
+    $('srcLabel').textContent = MODE_TEXT[m].label;
+    $('h-out').textContent = MODE_TEXT[m].out;
+    $('noteOut').textContent = m === 'h2v' ? NOTE_H2V : NOTE_V2H;
+    out.setAttribute('aria-label', MODE_TEXT[m].aria);
+    out.readOnly = m === 'h2v';
+    out.wrap = m === 'h2v' ? 'off' : 'soft';
+    src.value = texts[m];
+    directText = null;
+    if (!src.value.trim()) src.value = sampleFor(m);
+  }
+
+  // 縦→横の見本は、横→縦の見本を縦書きテキストにしたもの
+  function sampleFor(m) {
+    if (m === 'h2v') return SAMPLE;
+    return verticalText(paginate(layout(SAMPLE, 20).cols, 14), '　', true);
+  }
+
+  let current = { cols: [], rubies: [], h: 20, perPage: 10 };
+
+  function render() {
+    if (mode === 'v2h') return;
+    const { cols, rubies, h } = current;
+    const perPage = columnsPerPage(rubies.length > 0);
+    const pages = paginate(cols, perPage);
+    current.perPage = perPage;
+    renderPages(pages, rubies, h, perPage);
+    renderText(pages);
+  }
+
+  function update() {
+    if (mode === 'v2h') {
+      updateReverse();
+      save();
+      return;
+    }
+    let h = parseInt(rowsEl.value, 10);
+    if (!Number.isFinite(h)) h = 20;
+    h = Math.min(80, Math.max(3, h));
+    const text = src.value.replace(/\r\n?/g, '\n').replace(/\t/g, '　');
+    const { cols, rubies } = layout(text, h);
+    current = { cols, rubies, h };
+    render();
+
+    let count = 0;
+    for (const c of cols) for (const u of [...c.cells, ...c.hang]) if (!/^\s$/.test(u.t)) count += Array.from(u.t).length;
+    const sheets = Math.ceil((cols.length * h) / 400) || 0;
+    stats.innerHTML =
+      `<span>文字数 <b>${count.toLocaleString()}</b></span>` +
+      `<span>列数 <b>${cols.length}</b></span>` +
+      `<span>400字詰め換算 <b>${sheets}</b> 枚</span>`;
+
+    for (const b of document.querySelectorAll('#presets .chip')) {
+      b.setAttribute('aria-pressed', String(Number(b.dataset.v) === h));
+    }
+    save();
+  }
+
+  // 画像で保存（Canvas に原稿用紙を描く。色はライトテーマで固定）
+  const PNG = { bg: '#F6F8F5', paper: '#FFFFFF', ink: '#1D2420', grid: '#8FB5A2', soft: '#C9DDD2' };
+  const FONT = '"Shippori Mincho", "Hiragino Mincho ProN", "Yu Mincho", serif';
+  const ROT = new Set(Array.from('ー―—－‐─〜～…‥「」『』（）【】〔〕［］｛｝〈〉《》＝→←'));
+  const PUNCT = new Set(Array.from('、。，．'));
+  const SMALL = new Set(Array.from('ぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮヵヶ'));
+
+  function drawGlyph(ctx, ch, cx, cy, fs) {
+    ctx.font = `${fs}px ${FONT}`;
+    if (ROT.has(ch) || /^[\x21-\x7E]$/.test(ch)) {
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(Math.PI / 2);
+      ctx.fillText(ch, 0, 0);
+      ctx.restore();
+    } else if (PUNCT.has(ch)) {
+      ctx.fillText(ch, cx + fs * 0.5, cy - fs * 0.5);
+    } else if (SMALL.has(ch)) {
+      ctx.fillText(ch, cx + fs * 0.1, cy - fs * 0.1);
+    } else {
+      ctx.fillText(ch, cx, cy);
+    }
+  }
+
+  function drawTcy(ctx, t, cx, cy, fs, max) {
+    ctx.font = `${fs}px ${FONT}`;
+    const w = ctx.measureText(t).width;
+    if (w > max) ctx.font = `${fs * max / w}px ${FONT}`;
+    ctx.fillText(t, cx, cy);
+  }
+
+  async function exportPng() {
+    const { cols, rubies, h, perPage: total } = current;
+    const pages = paginate(cols, total);
+    const C = 36;
+    const gap = rubies.length ? Math.round(C * 0.45) : 6;
+    const padX = 12 + (rubies.length ? gap : 0), padY = 12, margin = 24, pageGap = 24;
+    const colW = C + 2;
+    const sheetW = padX * 2 + total * colW + (total - 1) * gap;
+    const sheetH = padY * 2 + h * C + 2;
+    const W = sheetW + margin * 2, H = margin * 2 + pages.length * sheetH + (pages.length - 1) * pageGap;
+    const scale = Math.min(2, 32000 / W, 32000 / H, Math.sqrt(16e6 / (W * H)));
+
+    const allText = cols.flatMap(c => [...c.cells, ...c.hang]).map(u => u.t).join('') + rubies.map(r => r.text).join('');
+    try { await document.fonts.load(`${C}px "Shippori Mincho"`, allText || '縦'); } catch (e) {}
+
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(W * scale);
+    canvas.height = Math.round(H * scale);
+    const ctx = canvas.getContext('2d');
+    ctx.scale(scale, scale);
+    ctx.fillStyle = PNG.bg;
+    ctx.fillRect(0, 0, W, H);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    pages.forEach((cols, p) => {
+      const top = margin + p * (sheetH + pageGap);
+      ctx.fillStyle = PNG.paper;
+      ctx.fillRect(margin, top, sheetW, sheetH);
+      ctx.strokeStyle = PNG.grid;
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(margin + 0.75, top + 0.75, sheetW - 1.5, sheetH - 1.5);
+
+      for (let c = 0; c < total; c++) {
+        const x = margin + sheetW - padX - colW - c * (colW + gap);
+        const y = top + padY;
+        const ix = x + 1, iy = y + 1;
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = PNG.soft;
+        ctx.beginPath();
+        for (let r = 1; r < h; r++) { ctx.moveTo(ix, iy + r * C + 0.5); ctx.lineTo(ix + C, iy + r * C + 0.5); }
+        ctx.stroke();
+        ctx.strokeStyle = PNG.grid;
+        ctx.strokeRect(x + 0.5, y + 0.5, colW - 1, h * C + 1);
+
+        const { cells = [], hang = [] } = cols[c] || {};
+        ctx.fillStyle = PNG.ink;
+        cells.forEach((u, r) => {
+          const hung = r === h - 1 && hang.length > 0;
+          const fs = C * (hung ? 0.56 : 0.66);
+          const off = hung ? C * 0.35 : C / 2;
+          if (u.tcy) drawTcy(ctx, u.t, ix + off, iy + r * C + off, fs, C * 0.9);
+          else drawGlyph(ctx, u.t, ix + off, iy + r * C + off, fs);
+        });
+        if (hang.length) {
+          const fs = C * (hang.length > 1 ? 0.34 : 0.42);
+          hang.forEach((u, k) => drawGlyph(ctx, u.t, ix + C - 1 - fs / 2, iy + h * C - 1 - (hang.length - k - 0.5) * fs, fs));
+        }
+        for (const g of rubyGroups(cells, rubies)) {
+          g.text.forEach((ch, k) => drawGlyph(ctx, ch, x + colW + gap / 2, iy + g.start * C + g.n * C * (k + 0.5) / g.text.length, C * 0.3));
+        }
+      }
+    });
+
+    canvas.toBlob(blob => {
+      if (!blob) { toast('画像を作れませんでした', 'toastPng'); return; }
+      const a = el('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'tategaki.png';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      toast('画像を保存しました', 'toastPng');
+    }, 'image/png');
+  }
+
+  // 下書きの保存（このブラウザだけ）
+  const KEY = 'tategaki-state-v1';
+  function save() {
+    try {
+      localStorage.setItem(KEY, JSON.stringify({
+        mode, text: mode === 'h2v' ? src.value : texts.h2v, textV: mode === 'v2h' ? src.value : texts.v2h,
+        join: optJoin.checked, unvert: optUnvert.checked, half: optHalf.checked, rows: rowsEl.value, sep: sepEl.value, kinsoku: kinsokuEl.value,
+        vert: optVert.checked, full: optFull.checked, kanji: optKanji.checked,
+        indent: optIndent.checked, tcy: optTcy.checked, ruby: optRuby.checked, ocrDir: ocrDirEl.value
+      }));
+    } catch (e) {}
+  }
+  function load() {
+    try {
+      const s = JSON.parse(localStorage.getItem(KEY) || 'null');
+      if (!s) return false;
+      texts.h2v = s.text ?? '';
+      texts.v2h = s.textV ?? '';
+      mode = s.mode === 'v2h' ? 'v2h' : 'h2v';
+      optJoin.checked = s.join ?? true;
+      optUnvert.checked = s.unvert ?? true;
+      optHalf.checked = s.half ?? false;
+      rowsEl.value = s.rows ?? 20;
+      sepEl.value = s.sep ?? '　';
+      // 以前の版は行頭禁則のオン・オフだけだった
+      kinsokuEl.value = typeof s.kinsoku === 'string' ? s.kinsoku : (s.kinsoku === false ? 'none' : 'hang');
+      optVert.checked = s.vert ?? true;
+      optFull.checked = s.full ?? true;
+      optKanji.checked = s.kanji ?? false;
+      optIndent.checked = s.indent ?? true;
+      optTcy.checked = s.tcy ?? false;
+      optRuby.checked = s.ruby ?? true;
+      ocrDirEl.value = s.ocrDir === 'jpn_vert' ? 'jpn_vert' : 'jpn';
+      return true;
+    } catch (e) { return false; }
+  }
+
+  // ファイルの読み込み
+  function decodeText(buf) {
+    if (buf[0] === 0xEF && buf[1] === 0xBB && buf[2] === 0xBF) return new TextDecoder('utf-8').decode(buf.subarray(3));
+    if (buf[0] === 0xFF && buf[1] === 0xFE) return new TextDecoder('utf-16le').decode(buf.subarray(2));
+    if (buf[0] === 0xFE && buf[1] === 0xFF) return new TextDecoder('utf-16be').decode(buf.subarray(2));
+    try { return new TextDecoder('utf-8', { fatal: true }).decode(buf); } catch (e) {}
+    // 日本語の古いテキストは Shift_JIS か EUC-JP が多い。文字化けの少ないほうを選ぶ
+    const bad = s => (s.match(/�/g) || []).length;
+    const sjis = new TextDecoder('shift_jis').decode(buf);
+    const euc = new TextDecoder('euc-jp').decode(buf);
+    return bad(euc) < bad(sjis) ? euc : sjis;
+  }
+
+  // zip の中から1つのファイルを取り出す（.docx 用）
+  async function unzipEntry(buf, name) {
+    const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+    let eocd = -1;
+    for (let i = buf.length - 22; i >= Math.max(0, buf.length - 65557); i--) {
+      if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+    }
+    if (eocd < 0) throw new Error('zip ではありません');
+    const count = dv.getUint16(eocd + 10, true);
+    const dec = new TextDecoder();
+    let p = dv.getUint32(eocd + 16, true);
+    for (let k = 0; k < count && dv.getUint32(p, true) === 0x02014b50; k++) {
+      const method = dv.getUint16(p + 10, true);
+      const size = dv.getUint32(p + 20, true);
+      const nlen = dv.getUint16(p + 28, true), xlen = dv.getUint16(p + 30, true), clen = dv.getUint16(p + 32, true);
+      const local = dv.getUint32(p + 42, true);
+      if (dec.decode(buf.subarray(p + 46, p + 46 + nlen)) === name) {
+        const start = local + 30 + dv.getUint16(local + 26, true) + dv.getUint16(local + 28, true);
+        const data = buf.subarray(start, start + size);
+        if (method === 0) return dec.decode(data);
+        if (method !== 8) throw new Error('未対応の圧縮形式');
+        const stream = new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+        return new Response(stream).text();
+      }
+      p += 46 + nlen + xlen + clen;
+    }
+    throw new Error(`${name} がありません`);
+  }
+
+  async function readDocx(buf) {
+    const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+    const doc = new DOMParser().parseFromString(await unzipEntry(buf, 'word/document.xml'), 'application/xml');
+    const inFallback = n => { for (; n; n = n.parentNode) if (n.localName === 'Fallback') return true; return false; };
+    const paras = [];
+    for (const p of doc.getElementsByTagNameNS(W, 'p')) {
+      if (inFallback(p)) continue;
+      let s = '';
+      const walk = node => {
+        for (const n of node.children) {
+          if (n.namespaceURI !== W) continue;
+          switch (n.localName) {
+            case 't': s += n.textContent; break;
+            case 'tab': s += '　'; break;
+            case 'br': case 'cr': s += '\n'; break;
+            // Word のルビはこのツールのルビ記法に直す
+            case 'ruby': {
+              const rt = n.getElementsByTagNameNS(W, 'rt')[0], base = n.getElementsByTagNameNS(W, 'rubyBase')[0];
+              s += rt ? `｜${base ? base.textContent : ''}《${rt.textContent}》` : (base ? base.textContent : '');
+              break;
+            }
+            case 'p': case 'txbxContent': break; // 入れ子の段落は別に拾う
+            default: walk(n);
+          }
+        }
+      };
+      walk(p);
+      paras.push(s);
+    }
+    return paras.join('\n');
+  }
+
+  // 青空文庫の注記［＃…］、冒頭の記号の説明、末尾の底本情報を取り除く
+  function cleanAozora(t) {
+    return t
+      .replace(/\r\n?/g, '\n')
+      .replace(/\n-{20,}\n【テキスト中に現れる記号について】[\s\S]*?\n-{20,}\n/, '\n')
+      .replace(/［＃[^］]*］/g, '')
+      .replace(/\n{2,}底本：[\s\S]*$/, '\n');
+  }
+
+  // ---- 古い Word 形式（.doc）----
+  // .doc は「複合ファイル」という入れ物の中に本文のストリームが入っている
+  function readCfb(buf) {
+    const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+    if (dv.getUint32(0, true) !== 0xE011CFD0 || dv.getUint32(4, true) !== 0xE11AB1A1) return null;
+    const ssz = 1 << dv.getUint16(0x1E, true), mssz = 1 << dv.getUint16(0x20, true);
+    const nFat = dv.getUint32(0x2C, true), dirStart = dv.getUint32(0x30, true), cutoff = dv.getUint32(0x38, true);
+    const miniFatStart = dv.getUint32(0x3C, true), difatStart = dv.getUint32(0x44, true);
+    const off = s => (s + 1) * ssz;
+    const u32s = (s, list) => { for (let i = 0; i < ssz / 4; i++) list.push(dv.getUint32(off(s) + i * 4, true)); };
+    const difat = [];
+    for (let i = 0; i < 109; i++) difat.push(dv.getUint32(0x4C + i * 4, true));
+    for (let s = difatStart, n = 0; s < 0xFFFFFFFA && n < 10000; n++) {
+      const per = ssz / 4 - 1;
+      for (let i = 0; i < per; i++) difat.push(dv.getUint32(off(s) + i * 4, true));
+      s = dv.getUint32(off(s) + per * 4, true);
+    }
+    const fat = [];
+    for (const s of difat.slice(0, nFat)) u32s(s, fat);
+    const chain = (start, table) => {
+      const out = [];
+      for (let s = start; s < 0xFFFFFFFA && out.length <= table.length; s = table[s]) out.push(s);
+      return out;
+    };
+    const readChain = (start, size) => {
+      const out = new Uint8Array(size);
+      let p = 0;
+      for (const s of chain(start, fat)) {
+        if (p >= size) break;
+        const n = Math.min(ssz, size - p);
+        out.set(buf.subarray(off(s), off(s) + n), p);
+        p += n;
+      }
+      return out;
+    };
+    const dir = readChain(dirStart, chain(dirStart, fat).length * ssz);
+    const ddv = new DataView(dir.buffer);
+    const u16 = new TextDecoder('utf-16le');
+    const entries = [];
+    for (let o = 0; o + 128 <= dir.length; o += 128) {
+      const nl = ddv.getUint16(o + 0x40, true);
+      entries.push({
+        name: nl >= 2 && nl <= 64 ? u16.decode(dir.subarray(o, o + nl - 2)) : '',
+        type: dir[o + 0x42], start: ddv.getUint32(o + 0x74, true), size: ddv.getUint32(o + 0x78, true)
+      });
+    }
+    const miniStream = readChain(entries[0].start, entries[0].size);
+    const miniFat = [];
+    for (const s of chain(miniFatStart, fat)) u32s(s, miniFat);
+    return name => {
+      const e = entries.find(x => x.type === 2 && x.name === name);
+      if (!e) return null;
+      if (e.size >= cutoff) return readChain(e.start, e.size);
+      const out = new Uint8Array(e.size);
+      let p = 0;
+      for (const s of chain(e.start, miniFat)) {
+        if (p >= e.size) break;
+        const n = Math.min(mssz, e.size - p);
+        out.set(miniStream.subarray(s * mssz, s * mssz + n), p);
+        p += n;
+      }
+      return out;
+    };
+  }
+
+  function readDoc(buf) {
+    const get = readCfb(buf);
+    const wd = get && get('WordDocument');
+    if (!wd) {
+      // 拡張子だけ .doc の RTF やテキストもある
+      const head = new TextDecoder('latin1').decode(buf.subarray(0, 5));
+      if (head === '{\\rtf') throw new FileError('RTF 形式の .doc には対応していません。Word で .docx か .txt に保存し直してください');
+      return decodeText(buf);
+    }
+    const dv = new DataView(wd.buffer, wd.byteOffset, wd.byteLength);
+    if (dv.getUint16(0, true) !== 0xA5EC) throw new FileError('Word 97 より古い形式の .doc には対応していません');
+    const flags = dv.getUint16(0x0A, true);
+    if (flags & 0x0100) throw new FileError('パスワード付きの文書は読み込めません');
+    const table = get(flags & 0x0200 ? '1Table' : '0Table');
+    // FIB（文書の目次）から本文の字数と「ピース表」の位置を読む
+    let p = 32;
+    p += 2 + dv.getUint16(p, true) * 2;
+    const lw = p + 2;
+    p += 2 + dv.getUint16(p, true) * 4;
+    const ccpText = dv.getInt32(lw + 12, true);
+    const fcClx = dv.getUint32(p + 2 + 33 * 8, true);
+    const tdv = new DataView(table.buffer, table.byteOffset, table.byteLength);
+    let q = fcClx;
+    while (table[q] === 0x01) q += 3 + tdv.getInt16(q + 1, true);
+    if (table[q] !== 0x02) throw new Error('piece table');
+    const n = (tdv.getUint32(q + 1, true) - 4) / 12;
+    q += 5;
+    const cp1252 = new TextDecoder('windows-1252'), u16 = new TextDecoder('utf-16le');
+    let text = '';
+    for (let i = 0; i < n && text.length < ccpText; i++) {
+      const len = tdv.getUint32(q + (i + 1) * 4, true) - tdv.getUint32(q + i * 4, true);
+      const fc = tdv.getUint32(q + (n + 1) * 4 + i * 8 + 2, true);
+      if (fc & 0x40000000) {
+        const o = (fc & 0x3FFFFFFF) / 2;
+        text += cp1252.decode(wd.subarray(o, o + len));
+      } else {
+        text += u16.decode(wd.subarray(fc, fc + len * 2));
+      }
+    }
+    // 本文のあとに脚注やヘッダーが続くので、本文の字数で切る
+    return cleanDocText(text.slice(0, ccpText));
+  }
+
+  // フィールド（目次・ルビなど）と制御文字を片付ける
+  function cleanDocText(t) {
+    const ctrl = c => c === '\r' || c === '\x0B' || c === '\x0C' || c === '\x07' ? '\n' : c === '\t' ? '\t' : c < ' ' ? '' : c;
+    let out = '';
+    const stack = [];
+    const emit = s => {
+      const f = stack[stack.length - 1];
+      if (!f) out += s;
+      else if (f.inResult) f.result += s;
+      else f.code += s;
+    };
+    for (const ch of t) {
+      if (ch === '\x13') { stack.push({ code: '', result: '', inResult: false }); continue; }
+      const f = stack[stack.length - 1];
+      if (ch === '\x14' && f) { f.inResult = true; continue; }
+      if (ch === '\x15' && f) {
+        stack.pop();
+        // Word のルビは EQ フィールド \s\up N(ルビ),親文字) で入っている
+        const m = f.code.match(/^\s*EQ\s[\s\S]*?\\s\s*\\up\s*-?\d+\s*\(([^)]*)\)\s*,\s*([^)]*)\)/i);
+        emit(m ? `｜${m[2]}《${m[1]}》` : f.result);
+        continue;
+      }
+      if (f && !f.inResult) f.code += ch;
+      else emit(ctrl(ch));
+    }
+    return out.replace(/\t/g, '　').replace(/\n{3,}/g, '\n\n');
+  }
+
+  // ---- 外部ライブラリ（PDF・文字の読み取り）----
+  const PDFJS = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/';
+  const TESSERACT = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
+  const scripts = {};
+  function loadScript(url) {
+    return scripts[url] ||= new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = url;
+      s.onload = resolve;
+      s.onerror = () => { delete scripts[url]; s.remove(); reject(new FileError('部品を読み込めませんでした。PDF と画像の読み込みにはインターネット接続が必要です')); };
+      document.head.appendChild(s);
+    });
+  }
+
+  let pdfjsReady;
+  function loadPdfJs() {
+    return pdfjsReady ||= (async () => {
+      await loadScript(PDFJS + 'build/pdf.min.js');
+      // ファイルを直接開いたページからも動くよう、ワーカーは同じページの blob として起動する
+      const code = await (await fetch(PDFJS + 'build/pdf.worker.min.js')).text();
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([code], { type: 'text/javascript' }));
+      return window.pdfjsLib;
+    })().catch(e => { pdfjsReady = null; throw e; });
+  }
+
+  let ocrWorker, ocrLang;
+  async function ocr(image, onProgress) {
+    await loadScript(TESSERACT);
+    const lang = ocrDirEl.value;
+    if (!ocrWorker || ocrLang !== lang) {
+      if (ocrWorker) await ocrWorker.terminate();
+      ocrWorker = null;
+      onProgress('文字の読み取りの準備中（初回は数十秒かかります）');
+      ocrWorker = await window.Tesseract.createWorker(lang, 1, {
+        logger: m => { if (m.status === 'recognizing text') ocrWorker && ocrWorker.onPct && ocrWorker.onPct(m.progress); }
+      });
+      // 縦書きは「縦に並んだ1つの文章のかたまり」として読ませないと列の順が崩れる
+      if (lang === 'jpn_vert') await ocrWorker.setParameters({ tessedit_pageseg_mode: '5' });
+      ocrLang = lang;
+    }
+    ocrWorker.onPct = pct => onProgress(`文字を読み取り中 ${Math.round(pct * 100)}%`);
+    const { data } = await ocrWorker.recognize(image);
+    return ocrText(data.text);
+  }
+
+  // 読み取り結果は1字ごとに空白が入り、行ごとに改行されるので、段落に組み直す
+  function ocrText(t) {
+    const CJK = '\\u3000-\\u30FF\\u3400-\\u9FFF\\uF900-\\uFAFF\\uFF00-\\uFFEF';
+    return t
+      .replace(new RegExp(`([${CJK}])[ \\t]+(?=[${CJK}])`, 'g'), '$1')
+      .split(/\n\s*\n/)
+      .map(p => p.split('\n').map(l => l.trim()).filter(Boolean).reduce((a, l) => a + (/[A-Za-z0-9,.]$/.test(a) && /^[A-Za-z0-9]/.test(l) ? ' ' : '') + l, ''))
+      .filter(Boolean)
+      .join('\n');
+  }
+
+  // ---- PDF ----
+  const median = a => { const s = [...a].sort((x, y) => x - y); return s.length ? s[s.length >> 1] : 0; };
+  const isCjk = c => /[　-ヿ㐀-鿿豈-﫿＀-￯]/.test(c);
+
+  // 1ページの文字を行（縦書きのPDFなら列）にまとめる
+  // s = 行の中の位置、t = 行の並ぶ方向の位置（どちらも読む順に増える）
+  function pdfLines(tc) {
+    const items = tc.items.filter(it => it.str && it.str.trim());
+    if (!items.length) return [];
+    const fsOf = it => Math.hypot(it.transform[2], it.transform[3]) || Math.hypot(it.transform[0], it.transform[1]) || it.height || 10;
+    // 縦書きの判定：縦書き用フォントの印か、次の字が右ではなく下に続く並び方か
+    let down = 0, right = 0;
+    for (let i = 1; i < items.length; i++) {
+      const p = items[i - 1], q = items[i], fs = fsOf(p);
+      const dx = q.transform[4] - p.transform[4], dy = p.transform[5] - q.transform[5];
+      if (Math.abs(dx) < fs * 0.3 && dy > fs * 0.3 && dy < fs * 2) down++;
+      else if (Math.abs(dy) < fs * 0.3 && dx - p.width > -fs * 0.5 && dx - p.width < fs * 2) right++;
+    }
+    const vertical = down > right || items.filter(it => tc.styles[it.fontName] && tc.styles[it.fontName].vertical).length > items.length / 2;
+    const boxes = items.map(it => {
+      const e = it.transform[4], f = it.transform[5], fs = fsOf(it);
+      // 部首の文字（⼀ ⾒）や縦書き用の句読点（︒ ﹁）として入っている字をふつうの字に戻す
+      const str = it.str.replace(/[⺀-⿟︐-︙︰-﹏]/g, fromVerticalForm);
+      const n = Array.from(str).length;
+      return vertical
+        ? { str, s: -f, len: fs * n, t: -e, fs }
+        : { str, s: e, len: it.width || fs * n, t: -f, fs };
+    }).sort((p, q) => p.t - q.t || p.s - q.s);
+    const bodyFs = median(boxes.map(b => b.fs));
+
+    const lines = [], rubies = [];
+    for (const b of boxes) {
+      if (b.fs < bodyFs * 0.65) { rubies.push(b); continue; }
+      let line = lines.find(l => Math.abs(l.t - b.t) < Math.max(l.fs, b.fs) * 0.5);
+      if (!line) lines.push(line = { t: b.t, fs: b.fs, boxes: [] });
+      line.boxes.push(b);
+    }
+    for (const l of lines) {
+      l.boxes.sort((p, q) => p.s - q.s);
+      l.chars = [];
+      let prevEnd = null;
+      for (const b of l.boxes) {
+        const chars = Array.from(b.str);
+        const last = l.chars[l.chars.length - 1];
+        if (prevEnd !== null && b.s - prevEnd > l.fs * 0.3 && last && !isCjk(last.ch) && !isCjk(chars[0])) l.chars.push({ ch: ' ', pos: b.s });
+        chars.forEach((ch, k) => l.chars.push({ ch, pos: b.s + b.len * (k + 0.5) / chars.length }));
+        prevEnd = b.s + b.len;
+      }
+      l.start = l.boxes[0].s;
+      l.end = prevEnd;
+    }
+    lines.sort((p, q) => p.t - q.t);
+
+    // 小さい字は、すぐ上（縦書きなら右）の行の漢字にかかるルビとして付け直す
+    for (const r of rubies) {
+      const line = lines.filter(l => l.t > r.t && l.t - r.t < l.fs * 1.4).sort((p, q) => p.t - q.t)[0];
+      if (!line) continue;
+      const rc = Array.from(r.str);
+      let k = 0;
+      for (const seg of r.str.split(/(\s+)/)) {
+        const segLen = Array.from(seg).length;
+        if (seg.trim()) {
+          const from = r.s + r.len * k / rc.length, to = r.s + r.len * (k + segLen) / rc.length;
+          const hit = line.chars.filter(c => c.pos > from - line.fs * 0.3 && c.pos < to + line.fs * 0.3 && /[\p{Script=Han}々〆ヶ]/u.test(c.ch) && !c.inRuby);
+          if (hit.length) {
+            hit.forEach(c => { c.inRuby = true; });
+            hit[0].rubyOpen = true;
+            hit[hit.length - 1].ruby = seg;
+          }
+        }
+        k += segLen;
+      }
+    }
+    for (const l of lines) {
+      l.text = l.chars.map(c => (c.rubyOpen ? '｜' : '') + c.ch + (c.ruby ? `《${c.ruby}》` : '')).join('').replace(/\s+$/, '');
+    }
+    return lines;
+  }
+
+  // 見た目の行を段落につなぎ直す。ヘッダー・フッター・ページ番号は除く
+  function joinPdfLines(pages) {
+    const pageNo = /^[\s\-–—−－ー(（\[［]*(p\.?|ページ)?\s*[0-9０-９]+\s*([/／]\s*[0-9０-９]+)?[\s\-–—−－ー)）\]］]*$/i;
+    const key = l => l.text.replace(/[0-9０-９]+/g, '#').replace(/\s/g, '');
+    const counts = new Map();
+    for (const lines of pages) {
+      for (const l of new Set([lines[0], lines[lines.length - 1]])) if (l) counts.set(key(l), (counts.get(key(l)) || 0) + 1);
+    }
+    const repeated = l => pages.length >= 3 && counts.get(key(l)) >= Math.max(3, pages.length * 0.5);
+
+    const paras = [];
+    let cur = null, prev = null, prevRight = 0;
+    for (const lines of pages) {
+      const body = lines.filter((l, i) => !((i === 0 || i === lines.length - 1) && (pageNo.test(l.text) || repeated(l))));
+      if (!body.length) continue;
+      const left = Math.min(...body.map(l => l.start));
+      const right = Math.max(...body.map(l => l.end));
+      const gaps = body.slice(1).map((l, i) => l.t - body[i].t);
+      const gap = median(gaps) || body[0].fs * 1.7;
+      body.forEach((l, i) => {
+        const indented = l.start > left + l.fs * 0.6 || /^[\s　]/.test(l.text);
+        const prevFull = prev && prev.end > prevRight - prev.fs * 1.2;
+        const closeEnough = i === 0 || l.t - body[i - 1].t < gap * 1.5;
+        if (cur !== null && prevFull && closeEnough && !indented) {
+          const space = /[A-Za-z0-9,.;:!?)]$/.test(cur) && /^[A-Za-z0-9(]/.test(l.text) ? ' ' : '';
+          cur = cur.replace(/([A-Za-z])-$/, '$1') + space + l.text.replace(/^\s+/, '');
+        } else {
+          if (cur !== null) paras.push(cur);
+          cur = (indented && !/^[\s　]/.test(l.text) ? '　' : '') + l.text.replace(/^ +/, '');
+        }
+        prev = l;
+        prevRight = right;
+      });
+    }
+    if (cur !== null) paras.push(cur);
+    return paras.join('\n');
+  }
+
+  async function readPdf(buf, onProgress) {
+    onProgress('PDF を開いています');
+    const pdfjs = await loadPdfJs();
+    let pdf;
+    try {
+      pdf = await pdfjs.getDocument({
+        data: buf, cMapUrl: PDFJS + 'cmaps/', cMapPacked: true,
+        standardFontDataUrl: PDFJS + 'standard_fonts/', isEvalSupported: false
+      }).promise;
+    } catch (e) {
+      if (e && e.name === 'PasswordException') throw new FileError('パスワード付きの PDF は読み込めません');
+      throw e;
+    }
+    const pages = [];
+    let chars = 0;
+    for (let i = 1; i <= pdf.numPages; i++) {
+      onProgress(`PDF を読み込み中 ${i} / ${pdf.numPages} ページ`);
+      const lines = pdfLines(await (await pdf.getPage(i)).getTextContent());
+      chars += lines.reduce((n, l) => n + l.text.length, 0);
+      pages.push(lines);
+    }
+    if (chars >= pdf.numPages * 20) return { text: joinPdfLines(pages) };
+
+    // 文字のデータがほとんどない（スキャンした PDF）ときは、ページを画像にして読み取る
+    const texts = [];
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const viewport = page.getViewport({ scale: 2 });
+      const canvas = document.createElement('canvas');
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+      texts.push(await ocr(canvas, msg => onProgress(`${i} / ${pdf.numPages} ページ：${msg}`)));
+    }
+    return { text: texts.join('\n'), ocr: true };
+  }
+
+  // ---- 読み込みの入口 ----
+  class FileError extends Error {}
+  const KINDS = [
+    [/\.(txt|text|md|csv)$/i, 'text'], [/\.docx$/i, 'docx'], [/\.doc$/i, 'doc'], [/\.pdf$/i, 'pdf'],
+    [/\.(png|jpe?g|webp|bmp|gif)$/i, 'image']
+  ];
+  function kindOf(file) {
+    const hit = KINDS.find(([re]) => re.test(file.name));
+    if (hit) return hit[1];
+    if (file.type === 'application/pdf') return 'pdf';
+    if (file.type.startsWith('image/')) return 'image';
+    if (file.type.startsWith('text/')) return 'text';
+    return null;
+  }
+
+  let loading = false;
+  function status(msg) {
+    clearTimeout(toastTimers.toastFile);
+    $('toastFile').textContent = msg;
+  }
+
+  async function loadFile(file) {
+    const kind = kindOf(file);
+    if (!kind) {
+      toast('読み込めるのはテキスト・Word（.docx／.doc）・PDF・画像です', 'toastFile');
+      return;
+    }
+    if (loading) { toast('前のファイルを読み込み中です', 'toastFile'); return; }
+    loading = true;
+    $('open').disabled = true;
+    try {
+      const buf = new Uint8Array(await file.arrayBuffer());
+      let text, usedOcr = false;
+      if (kind === 'docx') text = await readDocx(buf);
+      else if (kind === 'doc') text = readDoc(buf);
+      else if (kind === 'pdf') ({ text, ocr: usedOcr } = await readPdf(buf, status));
+      else if (kind === 'image') { text = await ocr(file, status); usedOcr = true; }
+      else text = decodeText(buf);
+      if (/［＃|【テキスト中に現れる記号について】/.test(text)) text = cleanAozora(text);
+      text = text.replace(/\r\n?/g, '\n').replace(/^\n+|\s+$/g, '');
+      if (!text) { toast('文字が見つかりませんでした', 'toastFile'); return; }
+      // 縦→横では、PDF・画像・Word から読み取った文章はもう読む順に並んでいるので出力欄に直接入れる
+      // テキストファイルも、縦書きのマス目になっていなければ同じ扱いにする
+      if (mode === 'v2h' && (kind !== 'text' || !horizontalText(text).ok)) {
+        src.value = '';
+        directText = text;
+        out.value = text;
+        update();
+        toast(`「${file.name}」${usedOcr ? 'の文字を読み取り' : 'を読み込み'}、横書きテキストに入れました。誤りがないか確かめてください`, 'toastFile');
+        return;
+      }
+      src.value = text;
+      directText = null;
+      update();
+      toast(usedOcr ? `「${file.name}」の文字を読み取りました。誤りがないか確かめてください` : `「${file.name}」を読み込みました`, 'toastFile');
+    } catch (e) {
+      console.error(e);
+      toast(e instanceof FileError ? e.message : 'このファイルは読み込めませんでした', 'toastFile');
+    } finally {
+      loading = false;
+      $('open').disabled = false;
+    }
+  }
+
+  const toastTimers = {};
+  function toast(msg, id = 'toast') {
+    $(id).textContent = msg;
+    clearTimeout(toastTimers[id]);
+    toastTimers[id] = setTimeout(() => { $(id).textContent = ''; }, Math.max(2200, msg.length * 120));
+  }
+
+  $('copy').addEventListener('click', () => {
+    const fallback = () => { out.focus(); out.select(); toast('選択しました。Ctrl+C でコピーしてください'); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(out.value).then(() => toast('コピーしました'), fallback);
+    } else fallback();
+  });
+  $('png').addEventListener('click', () => { exportPng().catch(() => toast('画像を作れませんでした', 'toastPng')); });
+  $('sample').addEventListener('click', () => { src.value = sampleFor(mode); directText = null; update(); });
+  $('clear').addEventListener('click', () => { src.value = ''; directText = null; update(); src.focus(); });
+  for (const b of document.querySelectorAll('[data-set-mode]')) {
+    b.addEventListener('click', () => {
+      if (b.dataset.setMode === mode) return;
+      setMode(b.dataset.setMode);
+      // 縦→横で読み取る画像は、たいてい縦書き
+      ocrDirEl.value = mode === 'v2h' ? 'jpn_vert' : 'jpn';
+      update();
+    });
+  }
+  out.addEventListener('input', () => {
+    if (mode !== 'v2h') return;
+    if (directText !== null) directText = out.value;
+    updateOutStats();
+  });
+  $('presets').addEventListener('click', e => {
+    const b = e.target.closest('.chip');
+    if (!b) return;
+    rowsEl.value = b.dataset.v;
+    update();
+  });
+  for (const el of [rowsEl, sepEl, kinsokuEl, optVert, optFull, optKanji, optIndent, optTcy, optRuby, ocrDirEl, optJoin, optUnvert, optHalf]) {
+    el.addEventListener('input', update);
+    el.addEventListener('change', update);
+  }
+  // 長文では打つたびに組み直すと重いので、少し待ってから組む
+  let typingTimer;
+  src.addEventListener('input', () => {
+    directText = null;
+    clearTimeout(typingTimer);
+    typingTimer = setTimeout(update, src.value.length > 20000 ? 300 : 0);
+  });
+
+  $('open').addEventListener('click', () => $('file').click());
+  $('file').addEventListener('change', e => {
+    const f = e.target.files[0];
+    if (f) loadFile(f);
+    e.target.value = '';
+  });
+
+  // ページのどこにドロップしても読み込む
+  let dragDepth = 0;
+  const hasFiles = e => e.dataTransfer && Array.from(e.dataTransfer.types).includes('Files');
+  const endDrag = () => { dragDepth = 0; document.body.classList.remove('dropping'); };
+  window.addEventListener('dragenter', e => {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    dragDepth++;
+    document.body.classList.add('dropping');
+  });
+  window.addEventListener('dragover', e => { if (hasFiles(e)) e.preventDefault(); });
+  window.addEventListener('dragleave', e => { if (hasFiles(e) && --dragDepth <= 0) endDrag(); });
+  window.addEventListener('drop', e => {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    endDrag();
+    const f = e.dataTransfer.files[0];
+    if (f) loadFile(f);
+  });
+
+  load();
+  setMode(mode, true);
+  update();
+
+  // 画面幅が変わって1ページの列数が変わるときだけ組み直す
+  if ('ResizeObserver' in window) {
+    new ResizeObserver(() => {
+      if (mode === 'h2v' && columnsPerPage(current.rubies.length > 0) !== current.perPage) render();
+    }).observe(scroller);
+  }
+})();
+</script>
+</body>
+</html>
