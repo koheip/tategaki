@@ -272,7 +272,7 @@
   .btn.ghost { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
   .toast { font-size: 13px; color: var(--accent); min-height: 1.5em; }
   #out {
-    min-height: 260px;
+    min-height: 420px;
     font-family: var(--mincho);
     font-size: 16px;
     line-height: 1.35;
@@ -306,8 +306,30 @@
   .opt-group { display: grid; gap: 16px; }
   /* 変換の向きに合わない部品は隠す */
   body[data-mode="v2h"] [data-mode="h2v"], body[data-mode="h2v"] [data-mode="v2h"] { display: none; }
-  /* 縦書きテキストは右の列から読むので右詰めにする */
-  body[data-mode="h2v"] #out { text-align: right; }
+  /* 縦書きテキストは、字の幅に左右されないよう1字ずつ同じ幅のマスに入れて表示する（コピーするのは #out の文字） */
+  body[data-mode="h2v"] #out { display: none; }
+  .out-grid {
+    height: 420px;
+    box-sizing: border-box;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: var(--field);
+    color: var(--ink);
+    padding: 12px;
+    overflow: auto;
+    resize: vertical;
+    /* 右の列から読むので右詰めにし、はみ出すときも右端から見せる */
+    direction: rtl;
+    font-family: var(--mincho);
+    font-size: 16px;
+    line-height: 1.35;
+  }
+  .out-grid:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .out-page { direction: ltr; width: max-content; }
+  .out-page + .out-page { margin-top: 1.35em; }
+  .out-row { display: flex; height: 1.35em; white-space: pre; }
+  .out-row > span { flex: none; width: 1em; text-align: center; }
+  .out-row > .sep-half { width: 0.5em; }
   body[data-mode="v2h"] #out { white-space: pre-wrap; line-height: 1.8; }
   body[data-mode="v2h"] #src { min-height: 360px; line-height: 1.5; }
   .drop-overlay {
@@ -391,10 +413,10 @@
         </select>
       </div>
       <label class="check"><input type="checkbox" id="optIndent" checked><span>段落の頭を1字下げる<small>「 で始まる段落や、すでに空白がある段落はそのまま</small></span></label>
-      <label class="check"><input type="checkbox" id="optTcy"><span>縦中横<small>2桁の半角数字や !? を1マスに横並び。テキスト出力では半角のまま</small></span></label>
+      <label class="check"><input type="checkbox" id="optTcy"><span>縦中横<small>2桁の半角数字や !? を1マスに横並び。テキスト出力では1字ずつ全角で並べます</small></span></label>
       <label class="check"><input type="checkbox" id="optRuby" checked><span>ルビを付ける<small>｜漢字《かんじ》 または 漢字《かんじ》。テキスト出力では省きます</small></span></label>
       <label class="check"><input type="checkbox" id="optVert" checked><span>縦書き用の記号に置き換える<small>ー→｜、「→﹁、。→︒ など</small></span></label>
-      <label class="check"><input type="checkbox" id="optFull" checked><span>半角英数を全角にする<small>テキスト出力のマスを揃えるため</small></span></label>
+      <label class="check"><input type="checkbox" id="optFull" checked><span>半角英数を全角にする<small>プレビューの英数字を全角で立てます。テキスト出力は列がずれないよう常に全角</small></span></label>
       <label class="check"><input type="checkbox" id="optKanji"><span>数字を漢数字にする<small>2026 → 二〇二六</small></span></label>
       </div>
       <div class="opt-group" data-mode="v2h">
@@ -412,20 +434,6 @@
     </div>
   </section>
 
-  <section aria-labelledby="h-preview" data-mode="h2v">
-    <div class="section-head">
-      <h2 id="h-preview">原稿用紙プレビュー</h2>
-      <div class="output-actions">
-        <div class="stats" id="stats"></div>
-        <span class="toast" id="toastPng" role="status"></span>
-        <button class="btn ghost" id="png" type="button">画像で保存</button>
-      </div>
-    </div>
-    <div class="panel scroller" id="scroller">
-      <div class="pages" id="pages"></div>
-    </div>
-  </section>
-
   <section aria-labelledby="h-out">
     <div class="section-head">
       <h2 id="h-out">縦書きテキスト</h2>
@@ -435,9 +443,25 @@
         <button class="btn" id="copy" type="button">コピー</button>
       </div>
     </div>
-    <div class="panel out-body">
+    <div class="panel out-body" id="outBody">
       <textarea id="out" readonly wrap="off" aria-label="縦書きに変換したテキスト"></textarea>
-      <p class="note" id="noteOut">右詰めで、右の列から左へ読みます。等幅でない書体や半角文字が混じる環境では列がずれることがあります。ルビは省き、ぶら下げた句読点は列の下にはみ出して置きます。</p>
+      <div class="out-grid" id="outGrid" data-mode="h2v" tabindex="0" role="region" aria-label="縦書きに変換したテキスト"></div>
+      <p class="note" id="noteOut">右詰めで、右の列から左へ読みます。半角の英数字や記号は全角にそろえます。この欄では1字ずつ同じ幅のマスに入れて表示します。貼り付け先では、絵文字や全角の字がない記号（× α など）が混じると列がずれることがあります。ルビは省き、ぶら下げた句読点は列の下にはみ出して置きます。</p>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-preview" data-mode="h2v">
+    <div class="section-head">
+      <h2 id="h-preview">原稿用紙プレビュー</h2>
+      <div class="output-actions">
+        <div class="stats" id="stats"></div>
+        <span class="toast" id="toastPng" role="status"></span>
+        <button class="btn ghost" id="png" type="button">画像で保存</button>
+        <button class="btn" id="preview" type="button" aria-expanded="false" aria-controls="scroller">プレビュー</button>
+      </div>
+    </div>
+    <div class="panel scroller" id="scroller" hidden>
+      <div class="pages" id="pages"></div>
     </div>
   </section>
 </div>
@@ -453,8 +477,8 @@
   // 縦書き用の置換（テキスト出力用）
   const VERT = {
     'ー':'｜','―':'｜','—':'｜','－':'｜','‐':'｜','─':'｜',
-    '〜':'≀','～':'≀','…':'︙','‥':'︰',
-    '、':'︑','。':'︒','，':'︐','：':'︰','；':'︔','！':'︕','？':'︖',
+    '〜':'⌇','～':'⌇','…':'︙','‥':'︰',
+    '、':'︑','。':'︒','，':'︐','：':'︰','；':'︔',
     '「':'﹁','」':'﹂','『':'﹃','』':'﹄','（':'︵','）':'︶',
     '【':'︻','】':'︼','〔':'︹','〕':'︺','［':'﹇','］':'﹈',
     '｛':'︷','｝':'︸','〈':'︿','〉':'﹀','《':'︽','》':'︾',
@@ -468,10 +492,11 @@
   const HANG_OK = new Set(Array.from('、。，．,.」』）)】〕］]｝}〉》’”'));
   // 縦書き用の字形（︒ ﹁ ︵ など）や部首の文字（⼀ ⾒）をふつうの字に戻す。
   // NFKC だと ︵ → ( のように半角になるものがあるので、半角の記号は全角にそろえる
-  // ︙ ︰ は NFKC だと "..." ".." になるので直接決める
+  // ︙ ︰ ︴ は NFKC だと "..." ".." "_" になるので直接決める
   const fromVerticalForm = c => {
     if (c === '︙') return '…';
     if (c === '︰') return '‥';
+    if (c === '︴') return '〜';
     const k = c.normalize('NFKC');
     return /^[!-~]$/.test(k) ? String.fromCharCode(k.charCodeAt(0) + 0xFEE0) : k;
   };
@@ -485,7 +510,7 @@
   const optIndent = $('optIndent'), optTcy = $('optTcy'), optRuby = $('optRuby');
   const ocrDirEl = $('ocrDir');
   const optJoin = $('optJoin'), optUnvert = $('optUnvert'), optHalf = $('optHalf');
-  const pagesEl = $('pages'), scroller = $('scroller'), out = $('out'), stats = $('stats');
+  const pagesEl = $('pages'), scroller = $('scroller'), outBody = $('outBody'), out = $('out'), outGrid = $('outGrid'), stats = $('stats');
 
   function el(tag, cls, text) {
     const e = document.createElement(tag);
@@ -494,16 +519,19 @@
     return e;
   }
 
-  const toFull = c => /[\x21-\x7E]/.test(c) ? String.fromCharCode(c.charCodeAt(0) + 0xFEE0) : c === ' ' ? '　' : c;
+  const toFull = c => /^[\x21-\x7E]$/.test(c) ? String.fromCharCode(c.charCodeAt(0) + 0xFEE0) : c === ' ' ? '　' : c;
+  // 濁点を別に打った字や絵文字の組み合わせを1マスにまとめる
+  const segmenter = 'Segmenter' in Intl ? new Intl.Segmenter('ja', { granularity: 'grapheme' }) : null;
+  const graphemes = s => segmenter ? Array.from(segmenter.segment(s), x => x.segment) : Array.from(s);
 
   // 1マスに入る単位（unit）に分ける。{ t: 文字, tcy?: 縦中横, ruby?: ルビ番号, ri?: ルビ内の位置 }
-  function plainUnits(s) {
+  function plainUnits(s, tcy) {
     if (optKanji.checked) {
       s = s.replace(/[0-9０-９]/g, c => KANJI[c >= '０' ? c.charCodeAt(0) - 0xFF10 : c.charCodeAt(0) - 48]);
     }
     const units = [];
-    const pushChars = str => { for (const c of str) units.push({ t: optFull.checked ? toFull(c) : c }); };
-    if (!optTcy.checked) { pushChars(s); return units; }
+    const pushChars = str => { for (const c of graphemes(str)) units.push({ t: optFull.checked ? toFull(c) : c }); };
+    if (!tcy) { pushChars(s); return units; }
     let last = 0;
     for (const m of s.matchAll(TCY_RE)) {
       pushChars(s.slice(last, m.index));
@@ -524,32 +552,32 @@
     return units;
   }
 
-  function toUnits(para, rubies) {
+  function toUnits(para, rubies, tcy) {
     const units = [];
     let last = 0;
     if (optRuby.checked) {
       for (const m of para.matchAll(RUBY_RE)) {
-        units.push(...plainUnits(para.slice(last, m.index)));
-        const base = plainUnits(m[1] ?? m[3]);
+        units.push(...plainUnits(para.slice(last, m.index), tcy));
+        const base = plainUnits(m[1] ?? m[3], tcy);
         const id = rubies.push({ text: m[2] ?? m[4], len: base.length }) - 1;
         base.forEach((u, i) => { u.ruby = id; u.ri = i; });
         units.push(...base);
         last = m.index + m[0].length;
       }
     }
-    units.push(...plainUnits(para.slice(last)));
+    units.push(...plainUnits(para.slice(last), tcy));
     return units;
   }
 
   const isHeadNg = u => HEAD_NG.has(u.t) || (u.tcy && /^[!?]/.test(u.t));
 
   // 列に割り付ける。列は { cells: マスの中身, hang: ぶら下げた字 }
-  function layout(text, h) {
+  function layout(text, h, tcy = optTcy.checked) {
     const rubies = [];
     const cols = [];
     const mode = kinsokuEl.value;
     for (const para of text.split('\n')) {
-      const units = toUnits(para, rubies);
+      const units = toUnits(para, rubies, tcy);
       if (!units.length) { cols.push({ cells: [], hang: [] }); continue; }
       if (optIndent.checked && !/^[\s「『（(]/.test(para)) units.unshift({ t: '　' });
       let i = 0;
@@ -600,11 +628,12 @@
   }
 
   // プレビューの幅に収まる1ページあたりの列数
+  // プレビューは閉じていることがあるので、同じ幅のテキスト出力の枠で測る
   function columnsPerPage(hasRuby) {
     const cell = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--cell')) || 30;
     const gap = hasRuby ? cell * 0.45 : 5;
     const cs = getComputedStyle(scroller);
-    const inner = scroller.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    const inner = outBody.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
     const avail = inner - 3 - 20 - (hasRuby ? gap * 2 : 0) - 2;
     return Math.max(3, Math.floor((avail + gap) / (cell + 2 + gap)));
   }
@@ -656,32 +685,65 @@
   }
 
   // テキスト出力もプレビューと同じページに分け、空行を挟んで上から並べる
+  // 縦中横は1マスに半角2字を入れるので、テキスト出力では縦中横なしで組み直す
   function renderText(pages) {
-    out.value = verticalText(pages, sepEl.value, optVert.checked);
-    // はみ出すときも、読み始め（右端）が見えるようにする
-    out.scrollLeft = out.scrollWidth;
+    const { text, h, perPage } = current;
+    if (optTcy.checked) pages = paginate(layout(text, h, false).cols, perPage);
+    const blocks = verticalRows(pages, optVert.checked);
+    out.value = joinRows(blocks, sepEl.value);
+    renderGrid(blocks, sepEl.value);
   }
 
-  function verticalText(pages, sep, vert) {
-    const map = vert ? (ch => VERT[ch] || ch) : (ch => ch);
-    const blocks = pages.map(cols => {
-      const lines = cols.map(c => [...c.cells, ...c.hang].map(u => u.tcy ? u.t : map(u.t)));
+  const escapeHtml = t => t.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
+
+  // 1字ずつ全角1字分の幅のマスに入れて並べる。選んでコピーしても、コピーボタンと同じ文字になるようにする
+  function renderGrid(blocks, sep) {
+    const sepHtml = sep === '' ? '' : `<span${sep === ' ' ? ' class="sep-half"' : ''}>${sep}</span>`;
+    outGrid.innerHTML = blocks.map(rows =>
+      '<div class="out-page">' +
+      rows.map(row => '<div class="out-row">' + row.map(c => `<span>${escapeHtml(c)}</span>`).join(sepHtml) + '</div>').join('') +
+      '</div>'
+    ).join('');
+    // はみ出すときも、読み始め（右端）が見えるようにする
+    outGrid.scrollLeft = 0;
+  }
+
+  // テキスト出力は、どの字も全角1字分の幅にそろえる（半角や幅の狭い記号は全角に置き換える）
+  const TEXT_FULL = {
+    '¥':'￥','£':'￡','¢':'￠','¬':'￢','¦':'￤',
+    '“':'〝','”':'〟','‘':'＇','’':'＇',
+    '‐':'－','‑':'－','‒':'－','–':'－'
+  };
+  function textCell(t, vert) {
+    const c = toFull(TEXT_FULL[t] || t);
+    return vert ? (VERT[c] || c) : c;
+  }
+
+  // ページごとに、横の行（左の列から順に1字ずつ）の並びを作る
+  function verticalRows(pages, vert) {
+    return pages.map(cols => {
+      const lines = cols.map(c => [...c.cells, ...c.hang].map(u => textCell(u.t, vert)));
       const height = Math.max(0, ...lines.map(l => l.length));
       const rows = [];
       for (let r = 0; r < height; r++) {
         const row = [];
-        for (let c = lines.length - 1; c >= 0; c--) row.push(lines[c][r] !== undefined ? lines[c][r] : '　');
         // 右詰めで表示するので、行の右端（最初の列の側）の空白は削らず、どの行も同じ幅にそろえる
-        rows.push(row.join(sep));
+        for (let c = lines.length - 1; c >= 0; c--) row.push(lines[c][r] !== undefined ? lines[c][r] : '　');
+        rows.push(row);
       }
-      return rows.join('\n');
+      return rows;
     });
-    return blocks.join('\n\n');
+  }
+
+  const joinRows = (blocks, sep) => blocks.map(rows => rows.map(row => row.join(sep)).join('\n')).join('\n\n');
+
+  function verticalText(pages, sep, vert) {
+    return joinRows(verticalRows(pages, vert), sep);
   }
 
   // ---- 縦書き → 横書き ----
   // 縦書き用の記号を元に戻す（残りの縦書き用の字形は NFKC で戻す）
-  const UNVERT = { '｜': 'ー', '≀': '〜', '‖': '＝' };
+  const UNVERT = { '｜': 'ー', '⌇': '〜', '≀': '〜', '‖': '＝' };
   // 等幅で見たときの字の幅（全角 2、半角 1）
   const cellWidth = ch => /^[\x00-\xFF｡-ﾟ]$/.test(ch) ? 1 : 2;
 
@@ -758,12 +820,12 @@
       cols.push(...g.cols);
     }
     let s = (optJoin.checked ? joinColumns(cols) : cols).join('\n');
-    if (optUnvert.checked) s = s.replace(/[︐-︙︰-﹏｜≀‖]/g, c => UNVERT[c] || fromVerticalForm(c));
+    if (optUnvert.checked) s = s.replace(/[︐-︙︰-﹏｜⌇≀‖]/g, c => UNVERT[c] || fromVerticalForm(c));
     if (optHalf.checked) s = s.replace(/[０-９Ａ-Ｚａ-ｚ]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
     return { text: s, ok };
   }
 
-  const NOTE_H2V = '右詰めで、右の列から左へ読みます。等幅でない書体や半角文字が混じる環境では列がずれることがあります。ルビは省き、ぶら下げた句読点は列の下にはみ出して置きます。';
+  const NOTE_H2V = '右詰めで、右の列から左へ読みます。半角の英数字や記号は全角にそろえます。この欄では1字ずつ同じ幅のマスに入れて表示します。貼り付け先では、絵文字や全角の字がない記号（× α など）が混じると列がずれることがあります。ルビは省き、ぶら下げた句読点は列の下にはみ出して置きます。';
   const NOTE_V2H = '右の列から順に読んで横書きに戻します。PDF・画像・Word のファイルは、読み取った文章をこの欄に直接入れます。この欄は直接直せます。';
   const NOTE_V2H_BAD = '縦書きのマス目の並びをうまく読み取れませんでした。列の区切りがずれているかもしれません。結果を確かめてください。';
 
@@ -816,10 +878,10 @@
   // 縦→横の見本は、横→縦の見本を縦書きテキストにしたもの
   function sampleFor(m) {
     if (m === 'h2v') return SAMPLE;
-    return verticalText(paginate(layout(SAMPLE, 20).cols, 14), '　', true);
+    return verticalText(paginate(layout(SAMPLE, 20, false).cols, 14), '　', true);
   }
 
-  let current = { cols: [], rubies: [], h: 20, perPage: 10 };
+  let current = { cols: [], rubies: [], h: 20, perPage: 10, text: '' };
 
   function render() {
     if (mode === 'v2h') return;
@@ -840,9 +902,14 @@
     let h = parseInt(rowsEl.value, 10);
     if (!Number.isFinite(h)) h = 20;
     h = Math.min(80, Math.max(3, h));
-    const text = src.value.replace(/\r\n?/g, '\n').replace(/\t/g, '　');
+    const text = src.value.replace(/\r\n?/g, '\n').replace(/\t/g, '　')
+      // 半角カナは全角に（ｶﾞ → ガ）。特殊な空白はふつうの空白に、幅のない字は取り除く
+      .normalize('NFC')
+      .replace(/[\uFF61-\uFF9F]+/g, m => m.normalize('NFKC'))
+      .replace(/[\u00A0\u2000-\u200A\u202F\u205F]/g, ' ')
+      .replace(/[\u200B\u2060\uFEFF]/g, '');
     const { cols, rubies } = layout(text, h);
-    current = { cols, rubies, h };
+    current = { cols, rubies, h, text };
     render();
 
     let count = 0;
@@ -1504,10 +1571,28 @@
   }
 
   $('copy').addEventListener('click', () => {
-    const fallback = () => { out.focus(); out.select(); toast('選択しました。Ctrl+C でコピーしてください'); };
+    const fallback = () => {
+      if (mode === 'v2h') { out.focus(); out.select(); toast('選択しました。Ctrl+C でコピーしてください'); return; }
+      // 縦書きテキストの欄（textarea）は隠しているので、一時的な欄を作ってコピーする
+      const ta = el('textarea');
+      ta.value = out.value;
+      ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0';
+      document.body.append(ta);
+      ta.select();
+      const ok = document.execCommand('copy');
+      ta.remove();
+      toast(ok ? 'コピーしました' : 'コピーできませんでした。欄の文字を選んで Ctrl+C でコピーしてください');
+    };
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(out.value).then(() => toast('コピーしました'), fallback);
     } else fallback();
+  });
+  $('preview').addEventListener('click', e => {
+    const open = scroller.hidden;
+    scroller.hidden = !open;
+    e.currentTarget.setAttribute('aria-expanded', String(open));
+    e.currentTarget.textContent = open ? 'プレビューを閉じる' : 'プレビュー';
+    if (open) scroller.scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
   $('png').addEventListener('click', () => { exportPng().catch(() => toast('画像を作れませんでした', 'toastPng')); });
   $('sample').addEventListener('click', () => { src.value = sampleFor(mode); directText = null; update(); });
@@ -1579,7 +1664,7 @@
   if ('ResizeObserver' in window) {
     new ResizeObserver(() => {
       if (mode === 'h2v' && columnsPerPage(current.rubies.length > 0) !== current.perPage) render();
-    }).observe(scroller);
+    }).observe(outBody);
   }
 })();
 </script>
